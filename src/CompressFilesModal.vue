@@ -112,8 +112,7 @@ const formatOptions = computed<Array<{ value: ArchiveCompressionFormat, label: s
 	return options
 })
 
-const supportsVolumes = computed(() => ARCHIVE_CAPABILITIES.sevenZipAvailable
-	&& (format.value === 'zip' || format.value === '7z'))
+const supportsVolumes = computed(() => ARCHIVE_CAPABILITIES.sevenZipAvailable)
 
 const volumeSizeBytes = computed<number | null>(() => {
 	if (!splitEnabled.value) {
