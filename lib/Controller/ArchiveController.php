@@ -40,16 +40,16 @@ final class ArchiveController extends OCSController {
 	 *
 	 * @param list<int> $fileIds
 	 */
-	public function compress(array $fileIds, string $target, string $format): DataResponse {
+	public function compress(array $fileIds, string $target, string $format, ?int $volumeSize = null): DataResponse {
 		try {
-			$this->compressionService->createJob($fileIds, $target, $format);
+			$this->compressionService->createJob($fileIds, $target, $format, $volumeSize);
 			return new DataResponse([]);
 		} catch (TargetAlreadyExists $e) {
 			return new DataResponse('Archive target already exists', Http::STATUS_CONFLICT);
 		} catch (UnsupportedArchiveFormatException $e) {
 			return new DataResponse($e->getMessage(), Http::STATUS_UNSUPPORTED_MEDIA_TYPE);
 		} catch (ArchiveLimitExceededException $e) {
-			return new DataResponse('Archive exceeds the configured limits', Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
+			return new DataResponse($e->getMessage(), Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
 		} catch (\Throwable $e) {
 			$this->logger->error('Failed to schedule archive compression', ['exception' => $e]);
 			return new DataResponse('Failed to schedule archive compression', Http::STATUS_INTERNAL_SERVER_ERROR);
