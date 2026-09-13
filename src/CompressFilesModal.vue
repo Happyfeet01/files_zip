@@ -10,7 +10,7 @@
 		contentClasses="zip-dialog"
 		@closing="handleClosing">
 		<template #actions>
-			<NcButton variant="primary" @click="saveFile">
+			<NcButton variant="primary" :disabled="!canSave" @click="saveFile">
 				{{ t('files_zip', 'Compress') }}
 			</NcButton>
 		</template>
@@ -31,6 +31,38 @@
 				ref="filenameInput"
 				v-model="filename"
 				:label="t('files_zip', 'Archive file name')" />
+
+			<div v-if="supportsVolumes" class="volume-section">
+				<label class="split-toggle">
+					<input v-model="splitEnabled" type="checkbox">
+					<span>{{ t('files_zip', 'Split into multiple parts') }}</span>
+				</label>
+
+				<div v-if="splitEnabled" class="volume-controls">
+					<label class="format-label" for="files-zip-volume-size">
+						{{ t('files_zip', 'Part size') }}
+					</label>
+					<div class="volume-row">
+						<input
+							id="files-zip-volume-size"
+							v-model.number="volumeSizeValue"
+							class="volume-input"
+							type="number"
+							min="1"
+							step="1">
+						<select v-model="volumeSizeUnit" class="volume-unit">
+							<option value="MiB">MiB</option>
+							<option value="GiB">GiB</option>
+						</select>
+					</div>
+					<p class="volume-hint">
+						{{ t('files_zip', 'The archive will be created as numbered parts such as {name}.001, {name}.002, …', { name: filename }) }}
+					</p>
+					<p v-if="!volumeSizeIsValid" class="volume-error">
+						{{ t('files_zip', 'Choose a part size between 1 MiB and 1 TiB.') }}
+					</p>
+				</div>
+			</div>
 		</div>
 	</NcDialog>
 </template>
@@ -42,7 +74,13 @@ import type { ArchiveCompressionFormat, CompressionDialogResult } from './servic
 import { n, t } from '@nextcloud/l10n'
 import { NcButton, NcDialog, NcTextField } from '@nextcloud/vue'
 import { computed, onMounted, ref, useTemplateRef, watch } from 'vue'
-import { ARCHIVE_CAPABILITIES, getArchivePath, replaceArchiveExtension } from './services.ts'
+import {
+	ARCHIVE_CAPABILITIES,
+	getArchivePath,
+	MAX_VOLUME_SIZE_BYTES,
+	MIN_VOLUME_SIZE_BYTES,
+	replaceArchiveExtension,
+} from './services.ts'
 
 const props = defineProps<{
 	nodes: INode[]
@@ -56,6 +94,9 @@ const showDialog = ref(true)
 const format = ref<ArchiveCompressionFormat>('zip')
 const filename = ref(getArchivePath(props.nodes, format.value))
 const filenameInput = useTemplateRef('filenameInput')
+const splitEnabled = ref(false)
+const volumeSizeValue = ref(2)
+const volumeSizeUnit = ref<'MiB' | 'GiB'>('GiB')
 
 const formatOptions = computed<Array<{ value: ArchiveCompressionFormat, label: string }>>(() => {
 	const options: Array<{ value: ArchiveCompressionFormat, label: string }> = [
@@ -71,8 +112,37 @@ const formatOptions = computed<Array<{ value: ArchiveCompressionFormat, label: s
 	return options
 })
 
+const supportsVolumes = computed(() => ARCHIVE_CAPABILITIES.sevenZipAvailable
+	&& (format.value === 'zip' || format.value === '7z'))
+
+const volumeSizeBytes = computed<number | null>(() => {
+	if (!splitEnabled.value) {
+		return null
+	}
+	const value = Number(volumeSizeValue.value)
+	if (!Number.isFinite(value) || value <= 0) {
+		return null
+	}
+	const multiplier = volumeSizeUnit.value === 'GiB' ? 1024 * 1024 * 1024 : 1024 * 1024
+	const bytes = Math.round(value * multiplier)
+	return Number.isSafeInteger(bytes) ? bytes : null
+})
+
+const volumeSizeIsValid = computed(() => !splitEnabled.value
+	|| (volumeSizeBytes.value !== null
+		&& volumeSizeBytes.value >= MIN_VOLUME_SIZE_BYTES
+		&& volumeSizeBytes.value <= MAX_VOLUME_SIZE_BYTES))
+
+const canSave = computed(() => filename.value.trim().length > 0 && volumeSizeIsValid.value)
+
 watch(format, (newFormat) => {
 	filename.value = replaceArchiveExtension(filename.value, newFormat)
+})
+
+watch(supportsVolumes, (supported) => {
+	if (!supported) {
+		splitEnabled.value = false
+	}
 })
 
 onMounted(() => {
@@ -84,10 +154,14 @@ onMounted(() => {
 })
 
 function saveFile(): void {
+	if (!canSave.value) {
+		return
+	}
 	showDialog.value = false
 	emit('close', {
 		filename: filename.value,
 		format: format.value,
+		volumeSize: splitEnabled.value ? volumeSizeBytes.value : null,
 	})
 }
 
@@ -111,14 +185,56 @@ p {
 	margin-bottom: 4px;
 }
 
-.format-select {
-	width: 100%;
+.format-select,
+.volume-unit,
+.volume-input {
 	min-height: 44px;
-	margin-bottom: 12px;
 	padding: 0 12px;
 	border: 2px solid var(--color-border-maxcontrast);
 	border-radius: var(--border-radius-large);
 	background: var(--color-main-background);
 	color: var(--color-main-text);
+}
+
+.format-select {
+	width: 100%;
+	margin-bottom: 12px;
+}
+
+.volume-section {
+	margin-top: 16px;
+}
+
+.split-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+}
+
+.volume-controls {
+	margin-top: 12px;
+}
+
+.volume-row {
+	display: flex;
+	gap: 8px;
+}
+
+.volume-input {
+	width: 100%;
+}
+
+.volume-unit {
+	min-width: 92px;
+}
+
+.volume-hint {
+	margin-top: 8px;
+	color: var(--color-text-maxcontrast);
+}
+
+.volume-error {
+	color: var(--color-error);
 }
 </style>
