@@ -44,6 +44,11 @@ final class ArchiveCompressJob extends QueuedJob {
 		return $this->argument['format'];
 	}
 
+	public function getVolumeSize(): ?int {
+		$volumeSize = $this->argument['volumeSize'] ?? null;
+		return is_int($volumeSize) ? $volumeSize : null;
+	}
+
 	protected function run($argument): void {
 		try {
 			$file = $this->compressionService->compress(
@@ -51,11 +56,13 @@ final class ArchiveCompressJob extends QueuedJob {
 				$this->getFileIds(),
 				$this->getTarget(),
 				$this->getFormat(),
+				$this->getVolumeSize(),
 			);
 			$this->notificationService->sendArchiveCompressionSuccess($this, $file);
 		} catch (\Throwable $e) {
 			$this->logger->error('Failed to create archive', [
 				'format' => $this->getFormat(),
+				'volumeSize' => $this->getVolumeSize(),
 				'exception' => $e,
 			]);
 			$this->notificationService->sendArchiveCompressionFailure($this);
