@@ -18,6 +18,9 @@ import { logger } from './logger.ts'
 
 const MAX_COMPRESS_SIZE = loadState('files_zip', 'max_compress_size', -1)
 
+export const MIN_VOLUME_SIZE_BYTES = 1024 * 1024
+export const MAX_VOLUME_SIZE_BYTES = 1024 * 1024 * 1024 * 1024
+
 export interface ArchiveCapabilities {
 	sevenZipAvailable: boolean
 	sevenZipPath: string
@@ -35,6 +38,7 @@ export type ArchiveCompressionFormat = 'zip' | 'tar' | 'tar.gz' | '7z'
 export interface CompressionDialogResult {
 	filename: string
 	format: ArchiveCompressionFormat
+	volumeSize: number | null
 }
 
 export function archiveExtension(format: ArchiveCompressionFormat): string {
@@ -69,9 +73,9 @@ export function isExtractableArchive(node: INode): boolean {
 		|| (ARCHIVE_CAPABILITIES.sevenZipAvailable && name.endsWith('.7z'))
 }
 
-async function compressFiles(fileIds: number[], target: string, format: ArchiveCompressionFormat) {
+async function compressFiles(fileIds: number[], target: string, format: ArchiveCompressionFormat, volumeSize: number | null) {
 	try {
-		if (format === 'zip') {
+		if (format === 'zip' && volumeSize === null) {
 			await axios.post(generateOcsUrl('apps/files_zip/api/v1/zip'), {
 				fileIds,
 				target,
@@ -81,13 +85,14 @@ async function compressFiles(fileIds: number[], target: string, format: ArchiveC
 				fileIds,
 				target,
 				format,
+				volumeSize,
 			})
 		}
 		showSuccess(t('files_zip', 'Creating {format} archive started. We will notify you as soon as the archive is available.', {
 			format: format.toUpperCase(),
 		}))
 	} catch (error) {
-		logger.error('Error when compressing the file', { error, format })
+		logger.error('Error when compressing the file', { error, format, volumeSize })
 		showError(t('files_zip', 'An error happened when trying to create the archive.'))
 	}
 }
@@ -121,7 +126,7 @@ export async function action(dir: string, nodes: INode[]) {
 		return null
 	}
 
-	await compressFiles(fileIds, dir + '/' + result.filename, result.format)
+	await compressFiles(fileIds, dir + '/' + result.filename, result.format, result.volumeSize)
 	return null
 }
 
