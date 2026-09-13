@@ -145,9 +145,6 @@ final class ArchiveCompressionService {
 			return null;
 		}
 
-		if ($format !== ArchiveFormat::ZIP && $format !== ArchiveFormat::SEVEN_ZIP) {
-			throw new UnsupportedArchiveFormatException('Multipart compression is supported only for ZIP and 7z archives');
-		}
 		if ($volumeSize < self::MIN_VOLUME_SIZE_BYTES || $volumeSize > self::MAX_VOLUME_SIZE_BYTES) {
 			throw new ArchiveLimitExceededException('Multipart archive part size must be between 1 MiB and 1 TiB');
 		}
@@ -393,9 +390,15 @@ final class ArchiveCompressionService {
 			$this->sevenZip->run([
 				'a', '-ttar', '-bd', '-bb0', '-y', '-spd', '--', $tarPath, ...$topLevelNames,
 			], $stageDir);
-			$this->sevenZip->run([
-				'a', '-tgzip', '-bd', '-bb0', '-y', '-spd', '--', $outputPath, $tarPath,
-			], $workDir);
+
+			$gzipArguments = ['a', '-tgzip', '-bd', '-bb0', '-y', '-spd'];
+			if ($volumeSize !== null) {
+				$gzipArguments[] = '-v' . $volumeSize . 'b';
+			}
+			$gzipArguments[] = '--';
+			$gzipArguments[] = $outputPath;
+			$gzipArguments[] = $tarPath;
+			$this->sevenZip->run($gzipArguments, $workDir);
 		} else {
 			$type = match ($format) {
 				ArchiveFormat::ZIP => 'zip',
